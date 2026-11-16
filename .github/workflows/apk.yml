@@ -32,7 +32,7 @@ jobs:
           android {
             namespace 'de.benytber.benchat'
             compileSdk 35
-            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 1; versionName '1.0' }
+            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 2; versionName '1.1' }
             buildTypes { release { minifyEnabled false; signingConfig signingConfigs.debug } }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
           }
@@ -59,36 +59,74 @@ jobs:
           import android.app.Activity;
           import android.graphics.Color;
           import android.os.Bundle;
+          import android.view.View;
           import android.view.WindowManager;
+          import android.webkit.JavascriptInterface;
           import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+          import android.widget.FrameLayout;
 
           public class MainActivity extends Activity {
-            private WebView web;
+            private WebView web, stream;
+            private String streamUrl = "";
 
-            @Override protected void onCreate(Bundle b) {
-              super.onCreate(b);
-              getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-              getWindow().setStatusBarColor(Color.parseColor("#07070a"));
-              web = new WebView(this);
-              web.setBackgroundColor(Color.parseColor("#07070a"));
-              WebSettings s = web.getSettings();
+            private WebView makeWeb() {
+              WebView w = new WebView(this);
+              w.setBackgroundColor(Color.parseColor("#09090c"));
+              WebSettings s = w.getSettings();
               s.setJavaScriptEnabled(true);
               s.setDomStorageEnabled(true);
               s.setMediaPlaybackRequiresUserGesture(false);
               s.setAllowFileAccess(true);
               s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-              web.setWebViewClient(new WebViewClient());
-              web.setWebChromeClient(new WebChromeClient());
-              setContentView(web);
+              w.setWebViewClient(new WebViewClient());
+              w.setWebChromeClient(new WebChromeClient());
+              return w;
+            }
+
+            // Bruecke fuer die Web-App: Twitch-Player nativ anzeigen (Twitch blockt das Einbetten auf http-Seiten)
+            public class Bridge {
+              @JavascriptInterface public void showStream(final String url, final int topCss, final int heightCss) {
+                runOnUiThread(() -> {
+                  float d = getResources().getDisplayMetrics().density;
+                  FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) stream.getLayoutParams();
+                  lp.topMargin = Math.round(topCss * d);
+                  lp.height = Math.max(1, Math.round(heightCss * d));
+                  stream.setLayoutParams(lp);
+                  if (!url.equals(streamUrl)) { streamUrl = url; stream.loadUrl(url); }
+                  stream.onResume();
+                  stream.setVisibility(View.VISIBLE);
+                });
+              }
+              @JavascriptInterface public void hideStream() {
+                runOnUiThread(() -> { stream.setVisibility(View.INVISIBLE); });
+              }
+            }
+
+            @Override protected void onCreate(Bundle b) {
+              super.onCreate(b);
+              getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              getWindow().setStatusBarColor(Color.parseColor("#09090c"));
+              getWindow().setNavigationBarColor(Color.parseColor("#09090c"));
+              FrameLayout root = new FrameLayout(this);
+              root.setBackgroundColor(Color.parseColor("#09090c"));
+              web = makeWeb();
+              stream = makeWeb();
+              stream.setBackgroundColor(Color.BLACK);
+              stream.setVisibility(View.INVISIBLE);
+              root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+              root.addView(stream, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 1));
+              web.addJavascriptInterface(new Bridge(), "BenApp");
+              setContentView(root);
               if (b != null) web.restoreState(b); else web.loadUrl("file:///android_asset/start.html");
             }
             @Override protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
-            // TTS soll weiterlaufen, auch wenn die App kurz im Hintergrund ist
-            @Override protected void onPause() { super.onPause(); }
-            @Override public void onBackPressed() { if (web.canGoBack()) web.goBack(); else super.onBackPressed(); }
+            @Override public void onBackPressed() {
+              if (stream.getVisibility() == View.VISIBLE) { web.evaluateJavascript("try{showTab('chat')}catch(e){}", null); return; }
+              if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+            }
           }
           BENEOF
           mkdir -p "$(dirname 'app/src/main/assets/start.html')"
