@@ -112,11 +112,10 @@ jobs:
            a.onclick=()=>{clearTimeout(t);a.style.display='none';document.getElementById('form').style.display='block'}}
           </script></body></html>
           BENEOF
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
