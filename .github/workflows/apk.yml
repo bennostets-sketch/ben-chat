@@ -32,8 +32,9 @@ jobs:
           android {
             namespace 'de.benytber.benchat'
             compileSdk 35
-            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 3; versionName '1.2' }
-            buildTypes { release { minifyEnabled false; signingConfig signingConfigs.debug } }
+            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 4; versionName '1.3' }
+            signingConfigs { release { storeFile file('../benchat.keystore'); storePassword 'benchat123'; keyAlias 'benchat'; keyPassword 'benchat123' } }
+            buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
           }
           BENEOF
@@ -95,7 +96,7 @@ jobs:
                   lp.topMargin = Math.round(topCss * d);
                   lp.height = Math.max(1, Math.round(heightCss * d));
                   stream.setLayoutParams(lp);
-                  if (!html.equals(playerHtml)) { playerHtml = html; stream.loadDataWithBaseURL("https://benchat.app/", html, "text/html", "utf-8", null); }
+                  if (!html.equals(playerHtml)) { playerHtml = html; if (html.startsWith("http")) stream.loadUrl(html); else stream.loadDataWithBaseURL("https://benchat.app/", html, "text/html", "utf-8", null); }
                   stream.onResume();
                   stream.setVisibility(View.VISIBLE);
                 });
@@ -150,6 +151,14 @@ jobs:
            a.onclick=()=>{clearTimeout(t);a.style.display='none';document.getElementById('form').style.display='block'}}
           </script></body></html>
           BENEOF
+      - name: Signatur-Schluessel (gleich fuer alle Updates)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download signing -p benchat.keystore -R ${{ github.repository }}; then echo vorhanden; else
+            keytool -genkeypair -keystore benchat.keystore -storepass benchat123 -keypass benchat123 -alias benchat -keyalg RSA -keysize 2048 -validity 20000 -dname "CN=BEN CHAT, O=ben_ytber, C=DE"
+            gh release create signing benchat.keystore -R ${{ github.repository }} -t Signatur -n "Signatur-Schluessel fuer App-Updates" --latest=false
+          fi
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
