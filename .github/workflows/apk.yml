@@ -1,0 +1,133 @@
+name: APK bauen
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Projekt erzeugen
+        run: |
+          mkdir -p "$(dirname 'settings.gradle')"
+          cat > 'settings.gradle' <<'BENEOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = "BenChat"
+          include ':app'
+          BENEOF
+          mkdir -p "$(dirname 'build.gradle')"
+          cat > 'build.gradle' <<'BENEOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          BENEOF
+          mkdir -p "$(dirname 'gradle.properties')"
+          cat > 'gradle.properties' <<'BENEOF'
+          android.useAndroidX=true
+          BENEOF
+          mkdir -p "$(dirname 'app/build.gradle')"
+          cat > 'app/build.gradle' <<'BENEOF'
+          plugins { id 'com.android.application' }
+          android {
+            namespace 'de.benytber.benchat'
+            compileSdk 35
+            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 1; versionName '1.0' }
+            buildTypes { release { minifyEnabled false; signingConfig signingConfigs.debug } }
+            compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+          }
+          BENEOF
+          mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
+          cat > 'app/src/main/AndroidManifest.xml' <<'BENEOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <uses-permission android:name="android.permission.WAKE_LOCK"/>
+            <application android:label="BEN CHAT" android:icon="@android:drawable/sym_action_chat" android:usesCleartextTraffic="true"
+                android:theme="@android:style/Theme.Black.NoTitleBar">
+              <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden"
+                  android:windowSoftInputMode="adjustResize">
+                <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          BENEOF
+          mkdir -p "$(dirname 'app/src/main/java/de/benytber/benchat/MainActivity.java')"
+          cat > 'app/src/main/java/de/benytber/benchat/MainActivity.java' <<'BENEOF'
+          package de.benytber.benchat;
+
+          import android.app.Activity;
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.view.WindowManager;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+
+          public class MainActivity extends Activity {
+            private WebView web;
+
+            @Override protected void onCreate(Bundle b) {
+              super.onCreate(b);
+              getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              getWindow().setStatusBarColor(Color.parseColor("#07070a"));
+              web = new WebView(this);
+              web.setBackgroundColor(Color.parseColor("#07070a"));
+              WebSettings s = web.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              s.setMediaPlaybackRequiresUserGesture(false);
+              s.setAllowFileAccess(true);
+              s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+              web.setWebViewClient(new WebViewClient());
+              web.setWebChromeClient(new WebChromeClient());
+              setContentView(web);
+              if (b != null) web.restoreState(b); else web.loadUrl("file:///android_asset/start.html");
+            }
+            @Override protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
+            // TTS soll weiterlaufen, auch wenn die App kurz im Hintergrund ist
+            @Override protected void onPause() { super.onPause(); }
+            @Override public void onBackPressed() { if (web.canGoBack()) web.goBack(); else super.onBackPressed(); }
+          }
+          BENEOF
+          mkdir -p "$(dirname 'app/src/main/assets/start.html')"
+          cat > 'app/src/main/assets/start.html' <<'BENEOF'
+          <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+          <style>body{margin:0;background:#07070a;color:#f2f2f7;font:16px system-ui,sans-serif;display:flex;flex-direction:column;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box}
+          h1{color:#ff2d95;font-weight:900;margin:0 0 6px}h1 span{color:#fff}p{color:#8b8b99;font-size:14px;line-height:1.5}
+          input{width:100%;box-sizing:border-box;background:#1a1a22;border:1px solid #2a2a35;border-radius:10px;padding:14px;color:#fff;font-size:16px;margin:12px 0}
+          button{width:100%;background:#ff2d95;border:0;border-radius:10px;padding:14px;color:#fff;font-weight:800;font-size:16px}
+          #auto{display:none;text-align:center}</style></head><body>
+          <div id="auto"><h1>BEN<span>CHAT</span></h1><p>Verbinde mit <b id="u"></b> …<br><br>Tippen zum Ändern</p></div>
+          <div id="form"><h1>BEN<span>CHAT</span></h1><p>Adresse vom BEN-CHAT-Helfer eingeben, z. B. <b>192.168.178.20:3800</b> (PC im WLAN) oder die Adresse deines Servers.</p>
+          <input id="i" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="192.168.178.20:3800"><button id="go">Verbinden</button></div>
+          <script>
+          let saved=''; try{saved=localStorage.getItem('server')||''}catch(e){}
+          const norm=v=>{v=v.trim();if(!v)return'';if(!/^https?:\/\//.test(v))v='http://'+v;return v.replace(/\/+$/,'')};
+          document.getElementById('i').value=saved.replace(/^https?:\/\//,'');
+          document.getElementById('go').onclick=()=>{const v=norm(document.getElementById('i').value);if(!v)return;try{localStorage.setItem('server',v)}catch(e){}location.href=v+'/'};
+          if(saved && !location.hash.includes('edit')){document.getElementById('form').style.display='none';const a=document.getElementById('auto');a.style.display='block';
+           document.getElementById('u').textContent=saved;const t=setTimeout(()=>location.href=saved+'/',1500);
+           a.onclick=()=>{clearTimeout(t);a.style.display='none';document.getElementById('form').style.display='block'}}
+          </script></body></html>
+          BENEOF
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle :app:assembleRelease --no-daemon
+      - run: cp app/build/outputs/apk/release/app-release.apk BEN-CHAT.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BEN-CHAT-apk
+          path: BEN-CHAT.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: BEN CHAT ${{ github.run_number }}
+          files: BEN-CHAT.apk
