@@ -32,7 +32,7 @@ jobs:
           android {
             namespace 'de.benytber.benchat'
             compileSdk 35
-            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 5; versionName '1.4' }
+            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 6; versionName '1.5' }
             signingConfigs { release { storeFile file('../benchat.keystore'); storePassword 'benchat123'; keyAlias 'benchat'; keyPassword 'benchat123' } }
             buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -91,7 +91,8 @@ jobs:
               s.setAllowFileAccess(true);
               s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
               w.setWebViewClient(new WebViewClient());
-              w.setWebChromeClient(new WebChromeClient());
+              // kein gruenes Android-Platzhalterbild bei leeren Video-/Audio-Playern (z. B. TTS-Overlays)
+              w.setWebChromeClient(new WebChromeClient() { @Override public android.graphics.Bitmap getDefaultVideoPoster() { return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888); } });
               return w;
             }
 
