@@ -32,7 +32,7 @@ jobs:
           android {
             namespace 'de.benytber.benchat'
             compileSdk 35
-            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 4; versionName '1.3' }
+            defaultConfig { applicationId 'de.benytber.benchat'; minSdk 24; targetSdk 35; versionCode 5; versionName '1.4' }
             signingConfigs { release { storeFile file('../benchat.keystore'); storePassword 'benchat123'; keyAlias 'benchat'; keyPassword 'benchat123' } }
             buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
             compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -68,10 +68,18 @@ jobs:
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.widget.FrameLayout;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.HashSet;
 
           public class MainActivity extends Activity {
             private WebView web, stream;
             private String playerHtml = "";
+            private FrameLayout root;
+            private final HashMap<String, WebView> tabViews = new HashMap<>();
+            private final HashMap<String, String> tabUrls = new HashMap<>();
 
             private WebView makeWeb() {
               WebView w = new WebView(this);
@@ -101,6 +109,30 @@ jobs:
                   stream.setVisibility(View.VISIBLE);
                 });
               }
+              // Eigene Tabs: jeder Tab ist ein eigenes Fenster (wie in OBS) - mit Ton, laeuft im Hintergrund weiter
+              @JavascriptInterface public void syncTabs(final String json, final String activeId, final int topCss, final int heightCss) {
+                runOnUiThread(() -> {
+                  try {
+                    JSONArray arr = new JSONArray(json);
+                    HashSet<String> keep = new HashSet<>();
+                    float d = getResources().getDisplayMetrics().density;
+                    for (int i = 0; i < arr.length(); i++) {
+                      JSONObject o = arr.getJSONObject(i);
+                      String id = o.getString("id"), url = o.getString("url");
+                      keep.add(id);
+                      WebView w = tabViews.get(id);
+                      if (w == null) { w = makeWeb(); w.setBackgroundColor(Color.BLACK); w.setVisibility(View.INVISIBLE); root.addView(w, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)); tabViews.put(id, w); }
+                      if (!url.equals(tabUrls.get(id))) { tabUrls.put(id, url); w.loadUrl(url); }
+                      if (id.equals(activeId) && heightCss > 0) {
+                        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) w.getLayoutParams();
+                        lp.topMargin = Math.round(topCss * d); lp.height = Math.round(heightCss * d); w.setLayoutParams(lp);
+                        w.setVisibility(View.VISIBLE); w.bringToFront();
+                      } else w.setVisibility(View.INVISIBLE);
+                    }
+                    for (String id : new ArrayList<>(tabViews.keySet())) if (!keep.contains(id)) { WebView w = tabViews.remove(id); tabUrls.remove(id); root.removeView(w); w.destroy(); }
+                  } catch (Exception e) { }
+                });
+              }
               @JavascriptInterface public void hidePlayer() {
                 runOnUiThread(() -> { stream.setVisibility(View.INVISIBLE); });
               }
@@ -111,7 +143,7 @@ jobs:
               getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
               getWindow().setStatusBarColor(Color.parseColor("#09090c"));
               getWindow().setNavigationBarColor(Color.parseColor("#09090c"));
-              FrameLayout root = new FrameLayout(this);
+              root = new FrameLayout(this);
               root.setBackgroundColor(Color.parseColor("#09090c"));
               web = makeWeb();
               stream = makeWeb();
